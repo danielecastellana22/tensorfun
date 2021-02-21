@@ -7,8 +7,11 @@ from torch.nn import init as INIT
 class BaseAggregator(nn.Module):
 
     # n_aggr allows to speed up the computation computing more aggregation in parallel. USEFUL FOR LSTM
-    def __init__(self, in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr):
+    def __init__(self, in_size, out_size, pos_stationarity=False, max_output_degree=None, t_size=None, n_aggr=1):
         super(BaseAggregator, self).__init__()
+
+        if not pos_stationarity and max_output_degree is None:
+            raise ValueError('If pos_stationarity is False, max_output_degree must be specified')
 
         self.in_size = in_size
         self.out_size = out_size
@@ -30,7 +33,7 @@ class BaseAggregator(nn.Module):
 # h = U1*h1 + U2*h2 + ... + Un*hn
 class SumChild(BaseAggregator):
 
-    def __init__(self, in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr):
+    def __init__(self,  in_size, out_size, pos_stationarity=False, max_output_degree=None, t_size=None, n_aggr=1):
         super(SumChild, self).__init__(in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr)
 
         if self.pos_stationarity:
@@ -70,7 +73,7 @@ class SumChild(BaseAggregator):
 # h3 =  Canonical decomposition
 class Canonical(BaseAggregator):
 
-    def __init__(self, in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr, rank):
+    def __init__(self,  in_size, out_size, rank, pos_stationarity=False, max_output_degree=None, t_size=None, n_aggr=1):
         super(Canonical, self).__init__(in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr)
 
         self.rank = rank
@@ -112,7 +115,7 @@ class Canonical(BaseAggregator):
 
 class Full(BaseAggregator):
 
-    def __init__(self, in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr, rank):
+    def __init__(self, in_size, out_size, pos_stationarity=False, max_output_degree=None, t_size=None, n_aggr=1):
         super(Full, self).__init__(in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr)
 
         in_size_list = [in_size] * max_output_degree
@@ -137,7 +140,7 @@ class Full(BaseAggregator):
 # h = U3*r3, where r3 = G*r1*r2, r1 = U1*h1 and r2 = U2*h2
 class Hosvd(BaseAggregator):
 
-    def __init__(self, in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr, rank):
+    def __init__(self,  in_size, out_size, rank, pos_stationarity=False, max_output_degree=None, t_size=None, n_aggr=1):
         if pos_stationarity:
             raise NotImplementedError("pos stationariy is not implemented yet!")
         super(Hosvd, self).__init__(in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr)
@@ -189,7 +192,7 @@ class Hosvd(BaseAggregator):
 class TensorTrain(BaseAggregator):
 
     # it is weight sharing, rather than pos_stationarity
-    def __init__(self, in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr, rank):
+    def __init__(self,  in_size, out_size, rank, pos_stationarity=False, max_output_degree=None, t_size=None, n_aggr=1):
         super(TensorTrain, self).__init__(in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr)
 
         self.rank = rank
@@ -251,7 +254,7 @@ class TensorTrain(BaseAggregator):
 class TensorTrainLMN(BaseAggregator):
 
     # it is weight sharing, rather than pos_stationarity
-    def __init__(self, in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr, rank):
+    def __init__(self,  in_size, out_size, rank, pos_stationarity=False, max_output_degree=None, t_size=None, n_aggr=1):
         super(TensorTrainLMN, self).__init__(in_size, out_size, pos_stationarity, max_output_degree, t_size, n_aggr)
 
         self.rank = rank
