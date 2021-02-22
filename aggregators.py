@@ -4,6 +4,7 @@ from torch import nn as nn
 from torch.nn import init as INIT
 
 
+# TODO: use mask parameters in forward method
 class BaseAggregator(nn.Module):
 
     # n_aggr allows to speed up the computation computing more aggregation in parallel. USEFUL FOR LSTM
@@ -26,7 +27,7 @@ class BaseAggregator(nn.Module):
 
     # input is nieghbour_h has shape batch_size x n_neighbours x h_size
     # output has shape batch_size x (n_aggr * h_size)
-    def forward(self, neighbour_h, type_embs):
+    def forward(self, batched_in_el, type_embs=None, mask=None):
         pass
 
 
@@ -56,13 +57,13 @@ class SumChild(BaseAggregator):
 
     # neighbour_states has shape bs x n_ch x h
     # type_embs has shape bs x emb_s
-    def forward(self, neighbour_h, type_embs=None):
-        bs = neighbour_h.size(0)
+    def forward(self, batched_in_el, type_embs=None, mask=None):
+        bs = batched_in_el.size(0)
         if self.pos_stationarity:
-            ris = th.matmul(th.sum(neighbour_h, 1, keepdim=True), self.U).squeeze(1) + self.b
+            ris = th.matmul(th.sum(batched_in_el, 1, keepdim=True), self.U).squeeze(1) + self.b
         else:
-            n_ch = neighbour_h.size(1)
-            ris = th.matmul(neighbour_h.view((bs, 1, -1)), self.U[:n_ch*self.in_size]).squeeze(1) + self.b[:n_ch * self.in_size]
+            n_ch = batched_in_el.size(1)
+            ris = th.matmul(batched_in_el.view((bs, 1, -1)), self.U[:n_ch * self.in_size]).squeeze(1) + self.b[:n_ch * self.in_size]
 
         if self.t_size is not None:
             ris += th.matmul(type_embs, self.U_type)
@@ -95,12 +96,12 @@ class Canonical(BaseAggregator):
         self.reset_parameters()
 
     # neighbour_states has shape batch_size x n_neighbours x insize
-    def forward(self, neighbour_h, type_embs=None):
-        n_ch = neighbour_h.size(1)
+    def forward(self, batched_in_el, type_embs=None, mask=None):
+        n_ch = batched_in_el.size(1)
         if not self.pos_stationarity:
-            ris = th.matmul(neighbour_h.unsqueeze(2), self.U[:n_ch, :, :]) + self.b[:n_ch, :, :]
+            ris = th.matmul(batched_in_el.unsqueeze(2), self.U[:n_ch, :, :]) + self.b[:n_ch, :, :]
         else:
-            ris = th.matmul(neighbour_h.unsqueeze(2), self.U) + self.b
+            ris = th.matmul(batched_in_el.unsqueeze(2), self.U) + self.b
         # ris has shape (bs x n_ch x 1 x n_aggr*rank)
         ris = th.prod(ris, 1)  # ris has shape (bs x 1 x n_aggr*rank)
 
@@ -125,11 +126,11 @@ class Full(BaseAggregator):
         self.T = AugmentedTensor(in_size_list, n_aggr * out_size, pos_stationarity, n_aggr=1)
 
     # neighbour_states has shape batch_size x n_neighbours x insize
-    def forward(self, neighbour_h, type_embs=None):
-        bs = neighbour_h.size(0)
-        n_ch = neighbour_h.size(1)
+    def forward(self, batched_in_el, type_embs=None, mask=None):
+        bs = batched_in_el.size(0)
+        n_ch = batched_in_el.size(1)
         #input_el = list(th.chunk(neighbour_h, self.max_output_degree, 1))
-        input_el = list(th.chunk(neighbour_h, n_ch, 1))
+        input_el = list(th.chunk(batched_in_el, n_ch, 1))
 
         if type_embs is not None:
             input_el.insert(0, type_embs)
@@ -167,13 +168,13 @@ class Hosvd(BaseAggregator):
         self.reset_parameters()
 
     # neighbour_states has shape batch_size x n_neighbours x insize
-    def forward(self, neighbour_h, type_embs=None):
-        bs = neighbour_h.size(0)
-        n_ch = neighbour_h.size(1)
+    def forward(self, batched_in_el, type_embs=None, mask=None):
+        bs = batched_in_el.size(0)
+        n_ch = batched_in_el.size(1)
         if not self.pos_stationarity:
-            ris = (th.matmul(neighbour_h.unsqueeze(2).unsqueeze(3), self.U[:n_ch, :, :]) + self.b[:n_ch, :, :]).squeeze(3)
+            ris = (th.matmul(batched_in_el.unsqueeze(2).unsqueeze(3), self.U[:n_ch, :, :]) + self.b[:n_ch, :, :]).squeeze(3)
         else:
-            ris = (th.matmul(neighbour_h.unsqueeze(2).unsqueeze(3), self.U) + self.b).squeeze(3)
+            ris = (th.matmul(batched_in_el.unsqueeze(2).unsqueeze(3), self.U) + self.b).squeeze(3)
         # ris has shape (bs x n_ch x n_aggr x rank)
         in_el_list = []
         if self.t_size is not None:
@@ -216,14 +217,14 @@ class TensorTrain(BaseAggregator):
         self.reset_parameters()
 
     # neighbour_states has shape batch_size x n_neighbours x insize
-    def forward(self, neighbour_h, type_embs=None):
-        bs = neighbour_h.size(0)
-        n_ch = neighbour_h.size(1)
+    def forward(self, batched_in_el, type_embs=None, mask=None):
+        bs = batched_in_el.size(0)
+        n_ch = batched_in_el.size(1)
 
         if not self.pos_stationarity:
-            ris = (th.matmul(neighbour_h.unsqueeze(2).unsqueeze(3), self.U[:n_ch, :, :, :]) + self.b[:n_ch, :, :, :]).squeeze(3)
+            ris = (th.matmul(batched_in_el.unsqueeze(2).unsqueeze(3), self.U[:n_ch, :, :, :]) + self.b[:n_ch, :, :, :]).squeeze(3)
         else:
-            ris = (th.matmul(neighbour_h.unsqueeze(2).unsqueeze(3), self.U) + self.b).squeeze(3)
+            ris = (th.matmul(batched_in_el.unsqueeze(2).unsqueeze(3), self.U) + self.b).squeeze(3)
         # ris has shape bs x n_ch x n_aggr x (r+1)*r
         rank_tens_list = th.chunk(ris, n_ch, 1)
 
@@ -280,11 +281,11 @@ class TensorTrainLMN(BaseAggregator):
         self.reset_parameters()
 
     # neighbour_states has shape batch_size x n_neighbours x insize
-    def forward(self, neighbour_h, type_embs=None):
-        bs = neighbour_h.size(0)
-        n_ch = neighbour_h.size(1)
+    def forward(self, batched_in_el, type_embs=None, mask=None):
+        bs = batched_in_el.size(0)
+        n_ch = batched_in_el.size(1)
 
-        ris = (th.matmul(neighbour_h.unsqueeze(2).unsqueeze(3), self.A) + self.A_b).squeeze(3)
+        ris = (th.matmul(batched_in_el.unsqueeze(2).unsqueeze(3), self.A) + self.A_b).squeeze(3)
         # ris has shape bs x n_ch x n_aggr x r
         ax_list = th.chunk(ris, n_ch, 1)
 
